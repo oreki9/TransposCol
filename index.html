@@ -1,0 +1,445 @@
+<html>
+<head>
+<style>
+#drop-region {
+	background-color: #fff;
+	border-radius:20px;
+	box-shadow:0 0 35px rgba(0,0,0,0.05);
+	width:500px;
+	padding:60px 40px;
+	text-align: center;
+	cursor:pointer;
+	transition:.3s;
+}
+#drop-region:hover {
+	box-shadow:0 0 45px rgba(0,0,0,0.1);
+}
+#image-preview {
+	margin-top:20px;
+}
+#image-preview .image-view {
+    display: inline-block;
+	position:relative;
+	margin-right: 13px;
+	margin-bottom: 13px;
+}
+#image-preview .image-view img {
+    max-width: 100%;
+    max-height: 100%;
+}
+#image-preview .overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    background: rgba(255,255,255,0.5);
+}
+body {
+  font-family: sans-serif;
+
+}
+
+.base-timer {
+  position: relative;
+  width: 300px;
+  height: 300px;
+}
+
+.base-timer__svg {
+  transform: scaleX(-1);
+}
+
+.base-timer__circle {
+  fill: none;
+  stroke: none;
+}
+
+.base-timer__path-elapsed {
+  stroke-width: 7px;
+  stroke: grey;
+}
+
+.base-timer__path-remaining {
+  stroke-width: 7px;
+  stroke-linecap: round;
+  transform: rotate(90deg);
+  transform-origin: center;
+  transition: 1s linear all;
+  fill-rule: nonzero;
+  stroke: currentColor;
+}
+
+.base-timer__path-remaining.green {
+  color: rgb(65, 184, 131);
+}
+
+.base-timer__path-remaining.orange {
+  color: orange;
+}
+
+.base-timer__path-remaining.red {
+  color: red;
+}
+
+.base-timer__label {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+}
+
+</style>
+</head>
+<body style="background-color:#fafafa;font-family: 'Segoe UI', sans-serif;">
+<div style="margin:auto">
+<div id="drop-region" style="margin:auto">
+	<div class="drop-message">
+		Drag & Drop images or click to upload
+	</div>
+</div>
+<div id="app"></div>
+<div>
+<canvas id="InputImg"></canvas>
+</div>
+<div>
+<canvas id="OutputImg"></canvas>
+</div>
+</div>
+<script>
+
+var PixelArraySave = [];//penyimpanan matrix pixel yang diproses
+
+var // where files are dropped + file selector is opened
+	dropRegion = document.getElementById("drop-region"),
+	// where images are previewed
+	imagePreviewRegion = document.getElementById("image-preview");
+// open file selector when clicked on the drop region
+var fakeInput = document.createElement("input");
+fakeInput.type = "file";
+fakeInput.accept = "image/*";
+fakeInput.multiple = true;
+
+dropRegion.addEventListener('click', function() {
+	fakeInput.click();
+});
+fakeInput.addEventListener("change", function() {
+	var files = fakeInput.files;
+	handleFiles(files);
+});
+function preventDefault(e) {
+	e.preventDefault();
+  	e.stopPropagation();
+}
+dropRegion.addEventListener('dragenter', preventDefault, false)
+dropRegion.addEventListener('dragleave', preventDefault, false)
+dropRegion.addEventListener('dragover', preventDefault, false)
+dropRegion.addEventListener('drop', preventDefault, false)
+function handleDrop(e) {
+	var dt = e.dataTransfer,
+		files = dt.files;
+	if (files.length) {
+		handleFiles(files);
+	} else {
+		// check for img
+		var html = dt.getData('text/html'),
+	        match = html && /\bsrc="?([^"\s]+)"?\s*/.exec(html),
+	        url = match && match[1];
+	    if (url) {
+	        uploadImageFromURL(url);
+	        return;
+	    }
+	}
+	function uploadImageFromURL(url) {
+		var img = new Image;
+        var c = document.createElement("canvas");
+        var ctx = c.getContext("2d");
+        img.onload = function() {
+            c.width = this.naturalWidth;     // update canvas size to match image
+            c.height = this.naturalHeight;
+            ctx.drawImage(this, 0, 0);       // draw in image
+            c.toBlob(function(blob) {        // get content as PNG blob
+            	// call our main function
+                handleFiles( [blob] );
+
+            }, "image/png");
+        };
+        img.onerror = function() {
+            alert("Error in uploading");
+        }
+        img.crossOrigin = "";              // if from different origin
+        img.src = url;
+	}
+
+}
+dropRegion.addEventListener('drop', handleDrop, false);
+function handleFiles(files) {
+	for (var i = 0, len = files.length; i < len; i++) {
+		if (validateImage(files[i]))
+			previewAnduploadImage(files[i]);
+	}
+}
+
+function validateImage(image) {
+	// check the type
+	var validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+	if (validTypes.indexOf( image.type ) === -1) {
+		alert("Invalid File Type");
+		return false;
+	}
+
+	// check the size
+	var maxSizeInBytes = 10e6; // 10MB
+	if (image.size > maxSizeInBytes) {
+		alert("File too large");
+		return false;
+	}
+	return true;
+}
+HTMLCanvasElement.prototype.SetCanvas = function(file,Key){
+	var c = this;//document.getElementById("InputImg");
+	var OutputCanvas = document.getElementById("OutputImg");
+	var ctx = c.getContext("2d");
+	var img = new Image();
+	var LoadCount = 0;
+	img.onload = function() {// update canvas size to match image
+		if(LoadCount==0){
+			LoadCount++;
+			c.width = img.width;
+			c.height = img.height;
+			OutputCanvas.width = img.width;
+			OutputCanvas.height = img.height;
+			ctx.drawImage(this, 0, 0);
+			img.crossOrigin = "";
+			CountDown(Math.round(img.width*img.height*0.001));
+			async function f() {
+				let promise = new Promise((resolve, reject) => {
+				setTimeout(() => resolve(
+					Encrypt(Key)), Math.round(img.width*img.height*0.001))
+				});
+				let result = await promise; // wait until the promise resolves (*)
+				Stopper = true;
+				//c.width = 0;c.height = 0;
+			}
+			f();
+		}
+	}
+	img.src = file;
+}
+function getBrowserWidth() {
+  return Math.max(
+    document.body.scrollWidth,
+    document.documentElement.scrollWidth,
+    document.body.offsetWidth,
+    document.documentElement.offsetWidth,
+    document.documentElement.clientWidth
+  );
+}
+function previewAnduploadImage(image) {
+	//container
+	/*var imgView = document.createElement("div");
+	imgView.className = "image-view";
+	imagePreviewRegion.appendChild(imgView);
+	// previewing image
+	*/
+	var ImageDiv = document.getElementsByClassName("drop-message")[0];
+	var img = new Image();//
+	//imgView.appendChild(img);
+	var Canvas = document.getElementById("InputImg");
+	//ImageDiv.innerHTML = "";
+	//ImageDiv.appendChild(img);
+	// progress overlay
+	/*var overlay = document.createElement("div");
+	overlay.className = "overlay";
+	imgView.appendChild(overlay);
+	// read the image...
+	*/
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		img.src = e.target.result;
+		img.style="width:100%;";
+		Canvas.SetCanvas(reader.result,"helloworld");
+	}
+	reader.readAsDataURL(image);
+}
+class Pixel {
+	constructor(_x, _y) {
+		this.X = _x;
+		this.Y = _y;
+	}
+}
+function TransPose(Inwidth,OutWidth,_xIn,_yIn){
+	let sum = (_yIn)*Inwidth+_xIn+1;
+	let InX = (sum%OutWidth);
+	let InY = Math.floor((sum - InX)/OutWidth);
+	return new Pixel(InX,InY);
+}
+function SortArrOutputIndex(InSortArr){
+	var len = InSortArr.length;
+	var indices = new Array(len);
+	for (var i = 0; i < len; ++i) indices[i] = i;
+	indices.sort(function (a, b) { return InSortArr[a] < InSortArr[b] ? -1 : InSortArr[a] > InSortArr[b] ? 1 : 0; })
+	return indices;
+}
+function GetTransposeMatrix(Xtrans,Ytrans,WMatrixResult,Htrans,ArrXPos){
+	if(Ytrans<Htrans){
+		Ytrans+=1;
+	}else{
+		Xtrans+=1;
+		Ytrans=1;
+	}
+	var PixelPosTrans = TransPose(ArrXPos.length,WMatrixResult,ArrXPos[Xtrans],Ytrans-1);
+	if(Xtrans==0) console.log(Ytrans);
+	return {X:Xtrans,Y:Ytrans,PixelPos:PixelPosTrans};
+}
+function Encrypt(Key){
+	var GetCanvas = document.getElementById("OutputImg");
+	var InputCanvas = document.getElementById("InputImg").getContext("2d");
+	var ctx = GetCanvas.getContext("2d");
+	let keyArr = SortArrOutputIndex(Key);
+	let HeigthMatrixKey = Math.ceil(GetCanvas.width*GetCanvas.height/Key.length);
+	var KeyPosX = 0;
+	var KeyPosY = 0;
+	var PosStr = "";
+	for(let y=0;y<GetCanvas.height;y++){
+		for(let x=0;x<GetCanvas.width;x++){
+			if(x<Key.length*2&&y<Key.length*12){
+			var TransPixel = GetTransposeMatrix(KeyPosX,KeyPosY,GetCanvas.width,HeigthMatrixKey,keyArr);
+			KeyPosX = TransPixel.X;
+			KeyPosY = TransPixel.Y;
+			let PixelPosTranspos = TransPixel.PixelPos;
+			var imgd = InputCanvas.getImageData(PixelPosTranspos.X, PixelPosTranspos.Y,1,1);
+			var PixelImg = imgd.data;
+			ctx.fillStyle = "rgba("+PixelImg[0]+","+PixelImg[1]+","+PixelImg[2]+","+(PixelImg[3]/255)+")";
+			ctx.fillRect( x, y, 1, 1 );
+			PosStr += PixelPosTranspos.X+"_"+PixelPosTranspos.Y+" ";
+			}else{ctx.fillStyle = "white";ctx.fillRect( x, y, 1, 1 );}
+		}
+	}
+	console.log(PosStr);
+}
+</script>
+<script>
+var Stopper = false;
+// Credit: Mateusz Rybczonec
+function CountDown(number){
+	const FULL_DASH_ARRAY = 283;
+	const WARNING_THRESHOLD = 10;
+	const ALERT_THRESHOLD = 5;
+
+	const COLOR_CODES = {
+	  info: {
+		color: "green"
+	  },
+	  warning: {
+		color: "orange",
+		threshold: WARNING_THRESHOLD
+	  },
+	  alert: {
+		color: "red",
+		threshold: ALERT_THRESHOLD
+	  }
+	};
+
+	const TIME_LIMIT = number;
+	let timePassed = 0;
+	let timeLeft = TIME_LIMIT;
+	let timerInterval = null;
+	let remainingPathColor = COLOR_CODES.info.color;
+
+	document.getElementById("app").innerHTML = `
+<div class="base-timer">
+	  <svg class="base-timer__svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+		<g class="base-timer__circle">
+		  <circle class="base-timer__path-elapsed" cx="50" cy="50" r="45"></circle>
+		  <path
+			id="base-timer-path-remaining"
+			stroke-dasharray="283"
+			class="base-timer__path-remaining ${remainingPathColor}"
+			d="
+			  M 50, 50
+			  m -45, 0
+			  a 45,45 0 1,0 90,0
+			  a 45,45 0 1,0 -90,0
+			"
+		  ></path>
+		</g>
+	  </svg>
+	  <span id="base-timer-label" class="base-timer__label">${formatTime(
+		timeLeft
+	  )}</span>
+	</div>
+	`;
+
+	startTimer();
+
+	function onTimesUp() {
+	  clearInterval(timerInterval);
+	}
+
+	function startTimer() {
+	  timerInterval = setInterval(() => {
+		timePassed = timePassed += 1;
+		if(Stopper){console.log(timeLeft);timePassed = TIME_LIMIT;timeLeft = TIME_LIMIT - timePassed;onTimesUp();document.getElementById("app").innerHTML = "";return};
+		timeLeft = TIME_LIMIT - timePassed;
+		document.getElementById("base-timer-label").innerHTML = formatTime(timeLeft);
+		setCircleDasharray();
+		setRemainingPathColor(timeLeft);
+		if (timeLeft === 0) {
+		  onTimesUp();
+		}
+	  }, 1000);
+	}
+
+	function formatTime(time) {
+	  const minutes = Math.floor(time / 60);
+	  let seconds = time % 60;
+
+	  if (seconds < 10) {
+		seconds = `0${seconds}`;
+	  }
+
+	  return `${minutes}:${seconds}`;
+	}
+
+	function setRemainingPathColor(timeLeft) {
+	  const { alert, warning, info } = COLOR_CODES;
+	  if (timeLeft <= alert.threshold) {
+		document
+		  .getElementById("base-timer-path-remaining")
+		  .classList.remove(warning.color);
+		document
+		  .getElementById("base-timer-path-remaining")
+		  .classList.add(alert.color);
+	  } else if (timeLeft <= warning.threshold) {
+		document
+		  .getElementById("base-timer-path-remaining")
+		  .classList.remove(info.color);
+		document
+		  .getElementById("base-timer-path-remaining")
+		  .classList.add(warning.color);
+	  }
+	}
+
+	function calculateTimeFraction() {
+	  const rawTimeFraction = timeLeft / TIME_LIMIT;
+	  return rawTimeFraction - (1 / TIME_LIMIT) * (1 - rawTimeFraction);
+	}
+
+	function setCircleDasharray() {
+	  const circleDasharray = `${(
+		calculateTimeFraction() * FULL_DASH_ARRAY
+	  ).toFixed(0)} 283`;
+	  document
+		.getElementById("base-timer-path-remaining")
+		.setAttribute("stroke-dasharray", circleDasharray);
+	}
+}
+</script>
+</body>
+</html>
